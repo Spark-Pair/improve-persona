@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, X, Info } from 'lucide-react';
 
 const FeedbackContext = createContext();
@@ -45,6 +45,26 @@ export const FeedbackProvider = ({ children }) => {
         });
     }, []);
 
+    const [confirmRender, setConfirmRender] = useState(false);
+    const [confirmClosing, setConfirmClosing] = useState(false);
+
+    useEffect(() => {
+        if (confirmState.isOpen) {
+            setConfirmRender(true);
+            setConfirmClosing(false);
+            document.body.classList.add('modal-open');
+        } else if (confirmRender) {
+            setConfirmClosing(true);
+            document.body.classList.remove('modal-open');
+            const timer = setTimeout(() => {
+                setConfirmRender(false);
+                setConfirmClosing(false);
+            }, 250);
+            return () => clearTimeout(timer);
+        }
+        return () => document.body.classList.remove('modal-open');
+    }, [confirmState.isOpen]);
+
     return (
         <FeedbackContext.Provider value={{ showToast, confirm }}>
             {children}
@@ -54,7 +74,7 @@ export const FeedbackProvider = ({ children }) => {
                 {toasts.map(toast => (
                     <div
                         key={toast.id}
-                        className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300
+                        className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl animate-toast-in
               ${toast.type === 'success' ? 'bg-[#10B981]/10 border-[#10B981]/20 text-[#10B981]' :
                                 toast.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-500' :
                                     'bg-[#3B82F6]/10 border-[#3B82F6]/20 text-[#3B82F6]'}
@@ -72,10 +92,10 @@ export const FeedbackProvider = ({ children }) => {
             </div>
 
             {/* Confirmation Modal Container */}
-            {confirmState.isOpen && (
+            {confirmRender && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={confirmState.onCancel} />
-                    <div className="relative w-full max-w-sm bg-[#0F172A] border border-white/10 rounded-[2rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+                    <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm ${confirmClosing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={confirmState.onCancel} />
+                    <div className={`relative w-full max-w-sm bg-[#0F172A] border border-white/10 rounded-[2rem] p-8 shadow-2xl ${confirmClosing ? 'animate-modal-out' : 'animate-confirm-in'}`}>
                         <h3 className="text-xl font-black text-white mb-3">{confirmState.title}</h3>
                         <p className="text-sm font-medium text-[#4B5563] mb-8 leading-relaxed">{confirmState.message}</p>
                         <div className="flex gap-4">

@@ -33,6 +33,13 @@ export const Navbar = () => {
 
   const handleNavClick = (e) => {
     const target = e.currentTarget;
+    const to = target.getAttribute('href');
+
+    // If already on routine page and clicking routine icon, trigger modal
+    if (to === '/routine' && location.pathname === '/routine') {
+      window.dispatchEvent(new CustomEvent('open-routine-modal'));
+    }
+
     setActiveStyle({
       left: target.offsetLeft,
       width: target.offsetWidth,

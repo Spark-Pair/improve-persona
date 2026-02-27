@@ -30,24 +30,38 @@ export const Button = ({ children, onClick, variant = 'primary', className = '',
 };
 
 export const Modal = ({ isOpen, onClose, title, children }) => {
+  const [shouldRender, setShouldRender] = React.useState(isOpen);
+  const [isClosing, setIsClosing] = React.useState(false);
+
   useEffect(() => {
+    let timer;
     if (isOpen) {
+      setShouldRender(true);
+      setIsClosing(false);
       document.body.classList.add('modal-open');
-    } else {
+    } else if (shouldRender) {
+      setIsClosing(true);
       document.body.classList.remove('modal-open');
+      timer = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+      }, 250);
     }
-    return () => document.body.classList.remove('modal-open');
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.body.classList.remove('modal-open');
+    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center p-0 sm:p-4">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+        className={`absolute inset-0 bg-black/60 backdrop-blur-sm ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`}
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md bg-[#0F172A] border-t sm:border border-white/10 rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl transform transition-all animate-in slide-in-from-bottom duration-300">
+      <div className={`relative w-full max-w-md bg-[#0F172A] border-t sm:border border-white/10 rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl transform transition-all ${isClosing ? 'animate-modal-out' : 'animate-modal-in'}`}>
         <div className="flex justify-between items-center mb-8">
           <h3 className="text-2xl font-black text-white">{title}</h3>
           <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full text-[#4B5563]">

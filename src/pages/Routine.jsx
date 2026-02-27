@@ -18,6 +18,11 @@ const Routine = () => {
       setRoutines(data);
     };
     fetchRoutines();
+
+    // Listen for Navbar triggers
+    const triggerModal = () => openAdd();
+    window.addEventListener('open-routine-modal', triggerModal);
+    return () => window.removeEventListener('open-routine-modal', triggerModal);
   }, []);
 
   const handleSave = async (routine) => {
@@ -114,14 +119,12 @@ const Routine = () => {
         )}
       </div>
 
-      {isModalOpen && (
-        <RoutineModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onSave={handleSave}
-          routine={editingRoutine}
-        />
-      )}
+      <RoutineModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSave}
+        routine={editingRoutine}
+      />
     </>
   );
 };

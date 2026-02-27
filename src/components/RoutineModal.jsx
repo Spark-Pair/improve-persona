@@ -8,6 +8,14 @@ export const RoutineModal = ({ isOpen, onClose, onSave, routine = null }) => {
     const [interval, setIntervalValue] = useState(routine?.recurrence?.interval || 1);
     const [selectedDays, setSelectedDays] = useState(routine?.recurrence?.days || [1, 2, 3, 4, 5]);
 
+    React.useEffect(() => {
+        setTitle(routine?.title || '');
+        setTime(routine?.time || '08:00');
+        setRecurrenceType(routine?.recurrence?.type || 'daily');
+        setIntervalValue(routine?.recurrence?.interval || 1);
+        setSelectedDays(routine?.recurrence?.days || [1, 2, 3, 4, 5]);
+    }, [routine, isOpen]);
+
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     const toggleDay = (index) => {
@@ -55,8 +63,8 @@ export const RoutineModal = ({ isOpen, onClose, onSave, routine = null }) => {
                             key={type}
                             onClick={() => setRecurrenceType(type)}
                             className={`py-3 rounded-xl text-xs font-bold capitalize transition-all border ${recurrenceType === type
-                                    ? 'bg-[#3B82F6]/10 border-[#3B82F6] text-[#3B82F6]'
-                                    : 'bg-transparent border-white/5 text-[#4B5563] hover:border-white/10'
+                                ? 'bg-[#3B82F6]/10 border-[#3B82F6] text-[#3B82F6]'
+                                : 'bg-transparent border-white/5 text-[#4B5563] hover:border-white/10'
                                 }`}
                         >
                             {type}
@@ -73,8 +81,8 @@ export const RoutineModal = ({ isOpen, onClose, onSave, routine = null }) => {
                                 key={day}
                                 onClick={() => toggleDay(i)}
                                 className={`w-10 h-10 rounded-full text-[10px] font-black transition-all border ${selectedDays.includes(i)
-                                        ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                                        : 'bg-[#1F2937] border-white/5 text-[#4B5563]'
+                                    ? 'bg-[#10B981] border-[#10B981] text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                                    : 'bg-[#1F2937] border-white/5 text-[#4B5563]'
                                     }`}
                             >
                                 {day[0]}
