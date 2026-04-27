@@ -1,0 +1,93 @@
+import { NavLink, useLocation } from 'react-router-dom';
+import { Home as HomeIcon, Calendar, PieChart, Settings, PlusCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+
+export const Navbar = () => {
+  const [activeStyle, setActiveStyle] = useState({ left: 0, width: 0, height: 0 });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const navRef = useRef(null);
+  const location = useLocation();
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsModalOpen(document.body.classList.contains('modal-open'));
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  // Set active indicator based on current route
+  useEffect(() => {
+    const navItems = navRef.current.querySelectorAll('a');
+    const activeItem = Array.from(navItems).find(
+      item => item.getAttribute('href') === location.pathname
+    );
+    if (activeItem) {
+      setActiveStyle({
+        left: activeItem.offsetLeft,
+        width: activeItem.offsetWidth,
+        height: activeItem.offsetHeight
+      });
+    }
+  }, [location]);
+
+  const handleNavClick = (e) => {
+    const target = e.currentTarget;
+    const to = target.getAttribute('href');
+
+    // If already on routine page and clicking routine icon, trigger modal
+    if (to === '/routine' && location.pathname === '/routine') {
+      window.dispatchEvent(new CustomEvent('open-routine-modal'));
+    }
+
+    setActiveStyle({
+      left: target.offsetLeft,
+      width: target.offsetWidth,
+      height: target.offsetHeight
+    });
+  };
+
+  return (
+    <div
+      className={`fixed bottom-0 left-0 right-0 px-8 z-50 flex justify-center pointer-events-none transition-all duration-500 ease-in-out ${isModalOpen ? 'translate-y-32 opacity-0' : 'translate-y-0'}`}
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
+    >
+      <nav
+        ref={navRef}
+        className="pointer-events-auto w-full max-w-md bg-[#1F2937]/90 backdrop-blur-lg border border-[#374151] p-1.5 rounded-full shadow-2xl relative"
+      >
+        <div className="relative flex items-center justify-evenly">
+          <NavItem to="/" icon={<HomeIcon size={24} />} onClick={handleNavClick} />
+          <NavItem to="/calendar" icon={<Calendar size={24} />} onClick={handleNavClick} />
+          <NavItem to="/routine" icon={<PlusCircle size={24} />} onClick={handleNavClick} />
+          <NavItem to="/stats" icon={<PieChart size={24} />} onClick={handleNavClick} />
+          <NavItem to="/settings" icon={<Settings size={24} />} onClick={handleNavClick} />
+
+          {/* Active indicator */}
+          <span
+            className="absolute -z-1 bg-[#10B981] rounded-full transition-all duration-300"
+            style={{
+              left: activeStyle.left,
+              width: activeStyle.width,
+              height: activeStyle.height
+            }}
+          />
+        </div>
+      </nav>
+    </div>
+  );
+};
+
+function NavItem({ to, icon, onClick }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `flex-1 flex items-center justify-center px-3 py-3 min-h-[44px] rounded-full transition-all duration-300 ${isActive ? "text-[#3b3b3b]" : "text-[#4B5563] hover:text-[#E5E7EB]"}`
+      }
+      onClick={onClick}
+    >
+      {icon}
+    </NavLink>
+  );
+}
