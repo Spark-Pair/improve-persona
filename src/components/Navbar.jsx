@@ -48,7 +48,10 @@ export const Navbar = () => {
   };
 
   return (
-    <div className={`fixed bottom-6 left-0 right-0 px-8 z-50 flex justify-center pointer-events-none transition-all duration-500 ease-in-out ${isModalOpen ? 'translate-y-32 opacity-0' : 'translate-y-0'}`}>
+    <div
+      className={`fixed bottom-0 left-0 right-0 px-8 z-50 flex justify-center pointer-events-none transition-all duration-500 ease-in-out ${isModalOpen ? 'translate-y-32 opacity-0' : 'translate-y-0'}`}
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
+    >
       <nav
         ref={navRef}
         className="pointer-events-auto w-full max-w-md bg-[#1F2937]/90 backdrop-blur-lg border border-[#374151] p-1.5 rounded-full shadow-2xl relative"
@@ -80,7 +83,7 @@ function NavItem({ to, icon, onClick }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `flex-1 flex items-center justify-center px-3 py-2 rounded-full transition-all duration-300 ${isActive ? "text-[#3b3b3b]" : "text-[#4B5563] hover:text-[#E5E7EB]"}`
+        `flex-1 flex items-center justify-center px-3 py-3 min-h-[44px] rounded-full transition-all duration-300 ${isActive ? "text-[#3b3b3b]" : "text-[#4B5563] hover:text-[#E5E7EB]"}`
       }
       onClick={onClick}
     >

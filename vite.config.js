@@ -11,7 +11,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
       manifest: {
-        name: 'Improve Persona',
+        name: 'improve-persona',
         short_name: 'Persona',
         description: 'Daily routine and personal improvement tracker',
         theme_color: '#0F172A',

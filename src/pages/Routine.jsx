@@ -1,16 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Clock, Calendar, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Calendar, RefreshCw } from 'lucide-react';
 import { db } from '../db';
-import { Layout } from '../components/Layout';
-import { Card, SectionHeader, Button } from '../components/UI';
+import { Card, SectionHeader } from '../components/UI';
 import { RoutineModal } from '../components/RoutineModal';
-import { useFeedback } from '../context/FeedbackContext';
+import { useFeedback } from '../context/feedbackContext';
+
+const formatRecurrenceSummary = (routine) => {
+  switch (routine.recurrenceType) {
+    case 'daily':
+      return 'Daily';
+    case 'weekly': {
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const days = Array.isArray(routine.recurrenceDays) ? routine.recurrenceDays : [];
+      if (days.length === 0) return 'Weekly';
+      return days.sort((a, b) => a - b).map(d => dayNames[d]).join(', ');
+    }
+    case 'interval':
+      return `Every ${routine.recurrenceInterval || 1} days`;
+    case 'none':
+      return 'One-time';
+    default:
+      return 'Daily';
+  }
+};
 
 const Routine = () => {
   const { showToast, confirm } = useFeedback();
   const [routines, setRoutines] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState(null);
+
+  const openAdd = () => {
+    setEditingRoutine(null);
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (routine) => {
+    setEditingRoutine(routine);
+    setIsModalOpen(true);
+  };
 
   useEffect(() => {
     const fetchRoutines = async () => {
@@ -52,16 +80,6 @@ const Routine = () => {
     }
   };
 
-  const openEdit = (routine) => {
-    setEditingRoutine(routine);
-    setIsModalOpen(true);
-  };
-
-  const openAdd = () => {
-    setEditingRoutine(null);
-    setIsModalOpen(true);
-  };
-
   return (
     <>
       <SectionHeader
@@ -88,20 +106,20 @@ const Routine = () => {
             <Card key={r.id} className="group relative">
               <div className="flex justify-between items-start">
                 <div onClick={() => openEdit(r)} className="cursor-pointer flex-1">
-                  <h3 className="text-xl font-black text-white group-hover:text-[#3B82F6] transition-colors">{r.title}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-black text-white group-hover:text-[#3B82F6] transition-colors">
+                      {r.name}
+                    </h3>
+                    {r.taskType !== 'checkbox' && (
+                      <span className="text-[10px] px-2 py-1 rounded-full bg-black/20 border border-white/10 text-[#9CA3AF] font-black uppercase tracking-widest">
+                        {r.taskType}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-4 mt-3">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#4B5563]">
-                      <Clock size={14} className="text-[#3B82F6]" />
-                      {r.time}
-                    </div>
                     <div className="flex items-center gap-1.5 text-xs font-bold text-[#4B5563] capitalize">
                       <Calendar size={14} className="text-[#10B981]" />
-                      {r.recurrence.type === 'weekly'
-                        ? `${r.recurrence.days.length} days/week`
-                        : r.recurrence.type === 'interval'
-                          ? `Every ${r.recurrence.interval} days`
-                          : 'Daily'
-                      }
+                      {formatRecurrenceSummary(r)}
                     </div>
                   </div>
                 </div>

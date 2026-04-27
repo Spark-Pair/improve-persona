@@ -12,24 +12,17 @@ import {
   subMonths,
   isToday
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
-import { Layout } from '../components/Layout';
+import { ChevronLeft, ChevronRight, CheckCircle2, Camera, Target } from 'lucide-react';
 import { Card, SectionHeader } from '../components/UI';
 import { db } from '../db';
+import { PhotoViewer } from '../components/PhotoViewer';
 
 const CalendarPage = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [completions, setCompletions] = useState([]);
   const [dayDetails, setDayDetails] = useState([]);
-
-  useEffect(() => {
-    fetchMonthCompletions();
-  }, [currentMonth]);
-
-  useEffect(() => {
-    fetchDayDetails();
-  }, [selectedDate]);
+  const [viewer, setViewer] = useState({ open: false, blob: null, title: '' });
 
   const fetchMonthCompletions = async () => {
     const start = format(startOfMonth(currentMonth), 'yyyy-MM-dd');
@@ -58,7 +51,9 @@ const CalendarPage = () => {
       .equals(dateStr)
       .toArray();
 
-    const routineIds = dayCompletions.filter(c => c.completed).map(c => c.routineId);
+    const routineIds = dayCompletions
+      .filter(c => c.completed || c.counterValue != null || c.photoBlob != null)
+      .map(c => c.routineId);
     if (routineIds.length === 0) {
       setDayDetails([]);
       return;
@@ -69,8 +64,25 @@ const CalendarPage = () => {
       .anyOf(routineIds)
       .toArray();
 
-    setDayDetails(routines);
+    const routineMap = new Map(routines.map(r => [r.id, r]));
+    const details = dayCompletions
+      .filter(c => routineMap.has(c.routineId))
+      .map(c => ({
+        routine: routineMap.get(c.routineId),
+        completion: c
+      }))
+      .sort((a, b) => (a.completion.completed === b.completion.completed ? 0 : a.completion.completed ? -1 : 1));
+
+    setDayDetails(details);
   };
+
+  useEffect(() => {
+    fetchMonthCompletions();
+  }, [currentMonth]);
+
+  useEffect(() => {
+    fetchDayDetails();
+  }, [selectedDate]);
 
   const days = eachDayOfInterval({
     start: startOfWeek(startOfMonth(currentMonth)),
@@ -153,20 +165,78 @@ const CalendarPage = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {dayDetails.map(r => (
-              <div key={r.id} className="flex items-center gap-4 bg-[#1F2937]/60 border border-white/5 p-4 rounded-2xl shadow-sm">
-                <CheckCircle2 size={20} className="text-[#10B981]" />
-                <div>
-                  <h5 className="font-bold text-white text-sm">{r.title}</h5>
-                  <p className="text-[10px] text-[#4B5563] font-bold uppercase">{r.time}</p>
+            {dayDetails.map(({ routine, completion }) => {
+              const taskType = routine.taskType || 'checkbox';
+              const counterTarget = routine.counterTarget || 0;
+              const counterValue = completion.counterValue ?? 0;
+              const hasPhoto = !!completion.photoBlob;
+
+              return (
+                <div key={`${routine.id}-${completion.id}`} className="flex items-center gap-4 bg-[#1F2937]/60 border border-white/5 p-4 rounded-2xl shadow-sm">
+                  {taskType === 'photo' ? (
+                    <Camera size={20} className={hasPhoto ? 'text-[#10B981]' : 'text-[#4B5563]'} />
+                  ) : taskType === 'counter' ? (
+                    <Target size={20} className={completion.completed ? 'text-[#10B981]' : 'text-[#3B82F6]'} />
+                  ) : (
+                    <CheckCircle2 size={20} className={completion.completed ? 'text-[#10B981]' : 'text-[#4B5563]'} />
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <h5 className="font-bold text-white text-sm truncate">{routine.name}</h5>
+                    {taskType === 'counter' && (
+                      <p className="text-[10px] text-[#4B5563] font-bold uppercase tracking-widest mt-1">
+                        {counterValue} / {counterTarget}
+                      </p>
+                    )}
+                    {taskType === 'photo' && hasPhoto && (
+                      <p className="text-[10px] text-[#4B5563] font-bold uppercase tracking-widest mt-1">
+                        Photo captured
+                      </p>
+                    )}
+                  </div>
+
+                  {taskType === 'photo' && hasPhoto && (
+                    <button
+                      type="button"
+                      onClick={() => setViewer({ open: true, blob: completion.photoBlob, title: routine.name })}
+                      className="w-12 h-12 rounded-2xl overflow-hidden border border-white/10 bg-black/20 active:scale-95 transition-all"
+                      aria-label="View photo"
+                    >
+                      <PhotoThumb blob={completion.photoBlob} />
+                    </button>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
+
+      <PhotoViewer
+        isOpen={viewer.open}
+        onClose={() => setViewer({ open: false, blob: null, title: '' })}
+        blob={viewer.blob}
+        title={viewer.title || 'Photo'}
+      />
     </>
   );
 };
 
 export default CalendarPage;
+
+function PhotoThumb({ blob }) {
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    if (!blob) {
+      setUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [blob]);
+
+  if (!url) return null;
+  return <img src={url} alt="" className="w-full h-full object-cover" />;
+}

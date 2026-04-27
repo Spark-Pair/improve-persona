@@ -1,4 +1,4 @@
-import { format, addDays, getDay, parseISO, isSameDay } from 'date-fns';
+import { format, getDay } from 'date-fns';
 
 /**
  * Recurrence Object Structure:
@@ -10,7 +10,12 @@ import { format, addDays, getDay, parseISO, isSameDay } from 'date-fns';
  */
 
 export const isTaskDue = (routine, date = new Date()) => {
-    const { recurrence, createdAt } = routine;
+    const recurrence = routine.recurrence ?? {
+        type: routine.recurrenceType ?? 'daily',
+        interval: routine.recurrenceInterval ?? null,
+        days: routine.recurrenceDays ?? null
+    };
+    const createdAt = routine.createdAt ?? new Date().toISOString();
     const targetDate = new Date(date);
     targetDate.setHours(0, 0, 0, 0);
 
@@ -23,14 +28,21 @@ export const isTaskDue = (routine, date = new Date()) => {
         case 'daily':
             return true;
 
-        case 'interval':
+        case 'none':
+            return format(targetDate, 'yyyy-MM-dd') === format(createdDate, 'yyyy-MM-dd');
+
+        case 'interval': {
             const diffTime = Math.abs(targetDate - createdDate);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return diffDays % recurrence.interval === 0;
+            const interval = Number(recurrence.interval ?? 1);
+            return diffDays % interval === 0;
+        }
 
-        case 'weekly':
+        case 'weekly': {
             const dayOfWeek = getDay(targetDate);
-            return recurrence.days.includes(dayOfWeek);
+            const days = Array.isArray(recurrence.days) ? recurrence.days : [];
+            return days.includes(dayOfWeek);
+        }
 
         default:
             return false;
@@ -38,3 +50,13 @@ export const isTaskDue = (routine, date = new Date()) => {
 };
 
 export const getTodayString = () => format(new Date(), 'yyyy-MM-dd');
+
+export const formatTime12 = (time24) => {
+    if (!time24) return '';
+    const [hours, minutes] = time24.split(':');
+    const h = parseInt(hours);
+    const m = parseInt(minutes);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+};

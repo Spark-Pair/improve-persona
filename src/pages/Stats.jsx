@@ -4,12 +4,13 @@ import {
   Flame,
   Target,
   TrendingUp,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Camera
 } from 'lucide-react';
-import { format, subDays, startOfDay, isSameDay } from 'date-fns';
-import { Layout } from '../components/Layout';
+import { format, subDays } from 'date-fns';
 import { Card, SectionHeader } from '../components/UI';
 import { db } from '../db';
+import { PhotoViewer } from '../components/PhotoViewer';
 
 const Stats = () => {
   const [stats, setStats] = useState({
@@ -19,15 +20,15 @@ const Stats = () => {
     weeklyCompletion: 0,
     totalCompletions: 0
   });
-  const [loading, setLoading] = useState(true);
+  const [counterInsights, setCounterInsights] = useState([]);
+  const [photoInsights, setPhotoInsights] = useState([]);
+  const [viewer, setViewer] = useState({ open: false, blob: null, title: '' });
 
   useEffect(() => {
     calculateStats();
   }, []);
 
   const calculateStats = async () => {
-    setLoading(true);
-
     // 1. Get all completions
     const completions = await db.completions.where('completed').equals(true).toArray();
     const routines = await db.routines.toArray();
@@ -40,7 +41,8 @@ const Stats = () => {
         weeklyCompletion: 0,
         totalCompletions: 0
       });
-      setLoading(false);
+      setCounterInsights([]);
+      setPhotoInsights([]);
       return;
     }
 
@@ -103,7 +105,64 @@ const Stats = () => {
       weeklyCompletion: weeklyCount,
       totalCompletions: completions.length
     });
-    setLoading(false);
+
+    // Counter insights (7-day rolling average)
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const sevenDaysAgoStr = format(subDays(new Date(), 6), 'yyyy-MM-dd');
+    const recent = await db.completions
+      .where('date')
+      .between(sevenDaysAgoStr, todayStr, true, true)
+      .toArray();
+
+    const counterRoutines = routines.filter(r => (r.taskType || 'checkbox') === 'counter');
+    if (counterRoutines.length > 0) {
+      const days = Array.from({ length: 7 }, (_, i) =>
+        format(subDays(new Date(), 6 - i), 'yyyy-MM-dd')
+      );
+      const byRoutine = new Map();
+      for (const c of recent) {
+        byRoutine.set(`${c.routineId}:${c.date}`, c);
+      }
+      setCounterInsights(
+        counterRoutines.map(r => {
+          const target = Number(r.counterTarget || 1);
+          const sum = days.reduce((acc, d) => {
+            const c = byRoutine.get(`${r.id}:${d}`);
+            return acc + Number(c?.counterValue ?? 0);
+          }, 0);
+          const avg = Math.round((sum / 7) * 10) / 10;
+          return { id: r.id, name: r.name, target, avg };
+        })
+      );
+    } else {
+      setCounterInsights([]);
+    }
+
+    // Photo insights (recent timeline)
+    const photoRoutines = routines.filter(r => (r.taskType || 'checkbox') === 'photo');
+    if (photoRoutines.length > 0) {
+      const ninetyDaysAgoStr = format(subDays(new Date(), 90), 'yyyy-MM-dd');
+      const recentForPhotos = await db.completions
+        .where('date')
+        .between(ninetyDaysAgoStr, todayStr, true, true)
+        .toArray();
+      const photoByRoutine = new Map(photoRoutines.map(r => [r.id, []]));
+      for (const c of recentForPhotos) {
+        if (!c.photoBlob) continue;
+        if (!photoByRoutine.has(c.routineId)) continue;
+        photoByRoutine.get(c.routineId).push({ date: c.date, blob: c.photoBlob });
+      }
+      setPhotoInsights(
+        photoRoutines
+          .map(r => {
+            const items = (photoByRoutine.get(r.id) || []).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 12);
+            return { id: r.id, name: r.name, items };
+          })
+          .filter(r => r.items.length > 0)
+      );
+    } else {
+      setPhotoInsights([]);
+    }
   };
 
   return (
@@ -183,8 +242,88 @@ const Stats = () => {
       <div className="mt-12 p-6 rounded-[2.5rem] bg-[#10B981]/5 border border-[#10B981]/10 text-center animate-pulse">
         <p className="text-xs font-bold text-[#10B981] uppercase tracking-[0.3em]">System optimized</p>
       </div>
+
+      {counterInsights.length > 0 && (
+        <section className="mt-10">
+          <div className="flex items-center gap-2 mb-4 px-2">
+            <Target size={14} className="text-[#3B82F6]" />
+            <h4 className="text-[10px] font-black text-[#4B5563] uppercase tracking-[0.2em]">Counters (7-day avg)</h4>
+          </div>
+          <div className="space-y-3">
+            {counterInsights.map((c) => (
+              <Card key={c.id} className="flex items-center justify-between p-5">
+                <div className="min-w-0">
+                  <p className="font-bold text-white truncate">{c.name}</p>
+                  <p className="text-[10px] text-[#4B5563] font-bold uppercase tracking-widest mt-1">
+                    Avg {c.avg} / {c.target}
+                  </p>
+                </div>
+                <span className="text-sm font-black text-white italic">{Math.min(100, Math.round((c.avg / c.target) * 100))}%</span>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {photoInsights.length > 0 && (
+        <section className="mt-10">
+          <div className="flex items-center gap-2 mb-4 px-2">
+            <Camera size={14} className="text-[#F59E0B]" />
+            <h4 className="text-[10px] font-black text-[#4B5563] uppercase tracking-[0.2em]">Photos</h4>
+          </div>
+          <div className="space-y-4">
+            {photoInsights.map((p) => (
+              <Card key={p.id} className="p-5">
+                <p className="font-bold text-white mb-3">{p.name}</p>
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {p.items.map((it) => (
+                    <PhotoThumbButton
+                      key={`${p.id}-${it.date}`}
+                      blob={it.blob}
+                      label={`${p.name} • ${it.date}`}
+                      onClick={() => setViewer({ open: true, blob: it.blob, title: p.name })}
+                    />
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <PhotoViewer
+        isOpen={viewer.open}
+        onClose={() => setViewer({ open: false, blob: null, title: '' })}
+        blob={viewer.blob}
+        title={viewer.title || 'Photo'}
+      />
     </>
   );
 };
 
 export default Stats;
+
+function PhotoThumbButton({ blob, onClick, label }) {
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    if (!blob) {
+      setUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [blob]);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 bg-black/20 active:scale-95 transition-all flex-shrink-0"
+      aria-label={label}
+    >
+      {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : null}
+    </button>
+  );
+}

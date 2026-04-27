@@ -1,9 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, X, Info } from 'lucide-react';
-
-const FeedbackContext = createContext();
-
-export const useFeedback = () => useContext(FeedbackContext);
+import { FeedbackContext } from './feedbackContext';
 
 export const FeedbackProvider = ({ children }) => {
     const [toasts, setToasts] = useState([]);

@@ -1,32 +1,72 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Download,
   Upload,
   Trash2,
-  Bell,
-  ShieldCheck,
   Database,
-  Info
+  Info,
+  ShieldCheck
 } from 'lucide-react';
-import { Layout } from '../components/Layout';
-import { Card, SectionHeader, Button } from '../components/UI';
+import { Card, SectionHeader } from '../components/UI';
 import { db } from '../db';
-import { useFeedback } from '../context/FeedbackContext';
+import { useFeedback } from '../context/feedbackContext';
+
+const blobToDataUrl = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Failed to read blob'));
+    reader.readAsDataURL(blob);
+  });
+
+const dataUrlToBlob = async (dataUrl) => {
+  const res = await fetch(dataUrl);
+  return await res.blob();
+};
+
+const normalizeRoutine = (routine) => {
+  const recurrenceType = routine.recurrenceType ?? routine.recurrence?.type ?? 'daily';
+  const createdAt = routine.createdAt ?? new Date().toISOString();
+  const taskType = routine.taskType ?? 'checkbox';
+  const normalized = {
+    ...routine,
+    name: (routine.name ?? routine.title ?? '').trim(),
+    recurrenceType,
+    recurrenceDays: routine.recurrenceDays ?? routine.recurrence?.days ?? null,
+    recurrenceInterval: routine.recurrenceInterval ?? routine.recurrence?.interval ?? null,
+    taskType,
+    counterTarget: taskType === 'counter' ? Number(routine.counterTarget ?? 1) : routine.counterTarget ?? null,
+    createdAt: createdAt instanceof Date ? createdAt.toISOString() : String(createdAt),
+  };
+  delete normalized.title;
+  delete normalized.time;
+  delete normalized.recurrence;
+  return normalized;
+};
 
 const SettingsPage = () => {
   const { showToast, confirm } = useFeedback();
-  const [isExporting, setIsExporting] = useState(false);
 
   const exportData = async () => {
-    setIsExporting(true);
     const routines = await db.routines.toArray();
     const completions = await db.completions.toArray();
+    const settings = await db.settings.toArray();
+
+    const exportedCompletions = await Promise.all(
+      completions.map(async (c) => {
+        if (!c.photoBlob) return c;
+        const { photoBlob, ...rest } = c;
+        const photoBase64 = await blobToDataUrl(photoBlob);
+        return { ...rest, photoBase64 };
+      })
+    );
 
     const data = {
-      version: 1,
-      exportDate: new Date().toISOString(),
+      version: 2,
+      exportedAt: new Date().toISOString(),
       routines,
-      completions
+      completions: exportedCompletions,
+      settings,
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -38,7 +78,6 @@ const SettingsPage = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setIsExporting(false);
     showToast('Backup downloaded', 'info');
   };
 
@@ -59,12 +98,32 @@ const SettingsPage = () => {
         if (isConfirmed) {
           await db.routines.clear();
           await db.completions.clear();
-          await db.routines.bulkAdd(data.routines);
-          await db.completions.bulkAdd(data.completions);
+          await db.settings.clear();
+          if (data.routines) await db.routines.bulkAdd(data.routines.map(normalizeRoutine));
+
+          if (data.completions) {
+            const importedCompletions = await Promise.all(
+              data.completions.map(async (c) => {
+                if (!c.photoBase64) return c;
+                const { photoBase64, ...rest } = c;
+                const photoBlob = await dataUrlToBlob(photoBase64);
+                return { ...rest, photoBlob };
+              })
+            );
+            await db.completions.bulkAdd(
+              importedCompletions.map((c) => ({
+                counterValue: c.counterValue ?? null,
+                photoBlob: c.photoBlob ?? null,
+                ...c,
+              }))
+            );
+          }
+
+          if (data.settings) await db.settings.bulkAdd(data.settings);
           showToast('Systems restored', 'success');
           setTimeout(() => window.location.reload(), 1500);
         }
-      } catch (err) {
+      } catch {
         showToast('Invalid backup file', 'error');
       }
     };
@@ -82,6 +141,7 @@ const SettingsPage = () => {
     if (isConfirmed) {
       await db.routines.clear();
       await db.completions.clear();
+      await db.settings.clear();
       showToast('System wiped');
       setTimeout(() => window.location.reload(), 1500);
     }
@@ -133,20 +193,10 @@ const SettingsPage = () => {
             <h4 className="text-[10px] font-black text-[#4B5563] uppercase tracking-[0.2em]">App Status</h4>
           </div>
           <Card className="p-0 overflow-hidden divide-y divide-white/5">
-            <div className="flex items-center justify-between p-6 opacity-50">
-              <div className="flex items-center gap-4">
-                <Bell size={20} className="text-[#F59E0B]" />
-                <span className="font-bold text-white">Notifications</span>
-              </div>
-              <div className="w-10 h-5 bg-[#374151] rounded-full relative">
-                <div className="absolute left-1 top-1 w-3 h-3 bg-[#4B5563] rounded-full" />
-              </div>
-            </div>
-
             <div className="flex items-center justify-between p-6">
               <div className="flex items-center gap-4">
                 <Info size={20} className="text-[#3B82F6]" />
-                <span className="font-bold text-white">PWA Status</span>
+                <span className="font-bold text-white">Platform</span>
               </div>
               <span className="bg-[#10B981]/10 text-[#10B981] px-3 py-1 rounded-full text-[10px] font-black uppercase shadow-[0_0_10px_rgba(16,185,129,0.2)]">Optimized</span>
             </div>
@@ -155,7 +205,7 @@ const SettingsPage = () => {
 
         <div className="text-center pb-8">
           <p className="text-[10px] font-bold text-[#4B5563] uppercase tracking-widest mb-1">Improve Persona</p>
-          <p className="text-[10px] text-[#4B5563]/50">Engine v1.0.4 • Protocol 01</p>
+          <p className="text-[10px] text-[#4B5563]/50">Engine v1.0.5 • Native Link</p>
         </div>
       </div>
     </>
