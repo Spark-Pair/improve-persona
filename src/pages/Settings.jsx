@@ -10,19 +10,11 @@ import {
 import { Card, SectionHeader } from '../components/UI';
 import { db } from '../db';
 import { useFeedback } from '../context/feedbackContext';
-
-const blobToDataUrl = (blob) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Failed to read blob'));
-    reader.readAsDataURL(blob);
-  });
-
-const dataUrlToBlob = async (dataUrl) => {
-  const res = await fetch(dataUrl);
-  return await res.blob();
-};
+import {
+  clearStoredPhotos,
+  deserializeCompletionPhoto,
+  serializeCompletionPhoto,
+} from '../utils/photoStorage';
 
 const normalizeRoutine = (routine) => {
   const recurrenceType = routine.recurrenceType ?? routine.recurrence?.type ?? 'daily';
@@ -53,16 +45,11 @@ const SettingsPage = () => {
     const settings = await db.settings.toArray();
 
     const exportedCompletions = await Promise.all(
-      completions.map(async (c) => {
-        if (!c.photoBlob) return c;
-        const { photoBlob, ...rest } = c;
-        const photoBase64 = await blobToDataUrl(photoBlob);
-        return { ...rest, photoBase64 };
-      })
+      completions.map(serializeCompletionPhoto)
     );
 
     const data = {
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       routines,
       completions: exportedCompletions,
@@ -96,6 +83,7 @@ const SettingsPage = () => {
         });
 
         if (isConfirmed) {
+          await clearStoredPhotos();
           await db.routines.clear();
           await db.completions.clear();
           await db.settings.clear();
@@ -103,17 +91,13 @@ const SettingsPage = () => {
 
           if (data.completions) {
             const importedCompletions = await Promise.all(
-              data.completions.map(async (c) => {
-                if (!c.photoBase64) return c;
-                const { photoBase64, ...rest } = c;
-                const photoBlob = await dataUrlToBlob(photoBase64);
-                return { ...rest, photoBlob };
-              })
+              data.completions.map(deserializeCompletionPhoto)
             );
             await db.completions.bulkAdd(
               importedCompletions.map((c) => ({
                 counterValue: c.counterValue ?? null,
                 photoBlob: c.photoBlob ?? null,
+                photoPath: c.photoPath ?? null,
                 ...c,
               }))
             );
@@ -139,6 +123,7 @@ const SettingsPage = () => {
     });
 
     if (isConfirmed) {
+      await clearStoredPhotos();
       await db.routines.clear();
       await db.completions.clear();
       await db.settings.clear();
@@ -158,7 +143,7 @@ const SettingsPage = () => {
             <Database size={14} className="text-[#3B82F6]" />
             <h4 className="text-[10px] font-black text-[#4B5563] uppercase tracking-[0.2em]">Data Management</h4>
           </div>
-          <Card className="p-0 overflow-hidden divide-y divide-white/5">
+          <Card noPadding={true} className="overflow-hidden divide-y divide-white/5">
             <div onClick={exportData} className="flex items-center justify-between p-6 hover:bg-white/5 cursor-pointer transition-colors group">
               <div className="flex items-center gap-4">
                 <Download size={20} className="text-[#3B82F6]" />
@@ -192,7 +177,7 @@ const SettingsPage = () => {
             <ShieldCheck size={14} className="text-[#10B981]" />
             <h4 className="text-[10px] font-black text-[#4B5563] uppercase tracking-[0.2em]">App Status</h4>
           </div>
-          <Card className="p-0 overflow-hidden divide-y divide-white/5">
+          <Card noPadding={true} className="p-0 overflow-hidden divide-y divide-white/5">
             <div className="flex items-center justify-between p-6">
               <div className="flex items-center gap-4">
                 <Info size={20} className="text-[#3B82F6]" />

@@ -47,3 +47,19 @@ db.version(2)
       if (completion.photoBlob === undefined) completion.photoBlob = null
     })
   })
+
+db.version(3)
+  .stores({
+    routines: '++id, name, recurrenceType, taskType, createdAt',
+    completions: '++id, routineId, date, completed, [routineId+date]',
+    settings: 'id',
+  })
+  .upgrade(async (tx) => {
+    const completionsTable = tx.table('completions')
+
+    await completionsTable.toCollection().modify((completion) => {
+      if (completion.counterValue === undefined) completion.counterValue = null
+      if (completion.photoBlob === undefined) completion.photoBlob = null
+      if (completion.photoPath === undefined) completion.photoPath = null
+    })
+  })

@@ -4,6 +4,11 @@ import { Card, SectionHeader } from '../components/UI';
 import { db } from '../db';
 import { isTaskDue, getTodayString } from '../utils/engine';
 import { PhotoViewer } from '../components/PhotoViewer';
+import {
+  completionHasPhoto,
+  createPhotoCompletionUpdate,
+  hydrateCompletionPhotos,
+} from '../utils/photoStorage';
 
 const Home = () => {
   const [tasks, setTasks] = useState([]);
@@ -25,8 +30,9 @@ const Home = () => {
       .where('date')
       .equals(today)
       .toArray();
+    const hydratedCompletions = await hydrateCompletionPhotos(completions);
 
-    const completionMap = new Map(completions.map(c => [c.routineId, c]));
+    const completionMap = new Map(hydratedCompletions.map(c => [c.routineId, c]));
 
     // 4. Combine
     const dailyTasks = dueToday.map(r => {
@@ -39,7 +45,7 @@ const Home = () => {
         taskType === 'counter'
           ? counterTarget > 0 && counterValue >= counterTarget
           : taskType === 'photo'
-            ? !!photoBlob
+            ? completionHasPhoto(completion)
             : completion?.completed || false;
 
       return {
@@ -103,7 +109,13 @@ const Home = () => {
   };
 
   const savePhoto = async (task, blob) => {
-    await upsertCompletion(task.id, { photoBlob: blob, completed: true });
+    const updates = await createPhotoCompletionUpdate({
+      completion: task.completion,
+      routineId: task.id,
+      date: getTodayString(),
+      blob,
+    });
+    await upsertCompletion(task.id, updates);
     loadDailyTasks();
   };
 

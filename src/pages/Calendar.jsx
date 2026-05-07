@@ -16,6 +16,10 @@ import { ChevronLeft, ChevronRight, CheckCircle2, Camera, Target } from 'lucide-
 import { Card, SectionHeader } from '../components/UI';
 import { db } from '../db';
 import { PhotoViewer } from '../components/PhotoViewer';
+import {
+  completionHasPhoto,
+  hydrateCompletionPhotos,
+} from '../utils/photoStorage';
 
 const CalendarPage = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -46,13 +50,14 @@ const CalendarPage = () => {
 
   const fetchDayDetails = async () => {
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
-    const dayCompletions = await db.completions
+    const rawDayCompletions = await db.completions
       .where('date')
       .equals(dateStr)
       .toArray();
+    const dayCompletions = await hydrateCompletionPhotos(rawDayCompletions);
 
     const routineIds = dayCompletions
-      .filter(c => c.completed || c.counterValue != null || c.photoBlob != null)
+      .filter(c => c.completed || c.counterValue != null || completionHasPhoto(c))
       .map(c => c.routineId);
     if (routineIds.length === 0) {
       setDayDetails([]);
@@ -169,7 +174,7 @@ const CalendarPage = () => {
               const taskType = routine.taskType || 'checkbox';
               const counterTarget = routine.counterTarget || 0;
               const counterValue = completion.counterValue ?? 0;
-              const hasPhoto = !!completion.photoBlob;
+              const hasPhoto = completionHasPhoto(completion);
 
               return (
                 <div key={`${routine.id}-${completion.id}`} className="flex items-center gap-4 bg-[#1F2937]/60 border border-white/5 p-4 rounded-2xl shadow-sm">

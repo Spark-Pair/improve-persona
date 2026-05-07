@@ -11,6 +11,10 @@ import { format, subDays } from 'date-fns';
 import { Card, SectionHeader } from '../components/UI';
 import { db } from '../db';
 import { PhotoViewer } from '../components/PhotoViewer';
+import {
+  completionHasPhoto,
+  hydrateCompletionPhotos,
+} from '../utils/photoStorage';
 
 const Stats = () => {
   const [stats, setStats] = useState({
@@ -146,9 +150,10 @@ const Stats = () => {
         .where('date')
         .between(ninetyDaysAgoStr, todayStr, true, true)
         .toArray();
+      const hydratedPhotoCompletions = await hydrateCompletionPhotos(recentForPhotos);
       const photoByRoutine = new Map(photoRoutines.map(r => [r.id, []]));
-      for (const c of recentForPhotos) {
-        if (!c.photoBlob) continue;
+      for (const c of hydratedPhotoCompletions) {
+        if (!completionHasPhoto(c) || !c.photoBlob) continue;
         if (!photoByRoutine.has(c.routineId)) continue;
         photoByRoutine.get(c.routineId).push({ date: c.date, blob: c.photoBlob });
       }

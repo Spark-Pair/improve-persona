@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 
-export const Card = ({ children, className = '', onClick }) => (
+export const Card = ({ children, className = '', onClick, noPadding=false }) => (
   <div
     onClick={onClick}
-    className={`bg-[#1F2937]/80 backdrop-blur-md border border-white/5 rounded-3xl p-6 shadow-xl transition-all duration-300 ${onClick ? 'cursor-pointer hover:border-[#3B82F6]/50 active:scale-[0.98]' : ''} ${className}`}
+    className={`bg-[#1F2937]/80 backdrop-blur-md border border-white/5 rounded-3xl ${noPadding ? '' : "p-6"} shadow-xl transition-all duration-300 ${onClick ? 'cursor-pointer hover:border-[#3B82F6]/50 active:scale-[0.98]' : ''} ${className}`}
   >
     {children}
   </div>
