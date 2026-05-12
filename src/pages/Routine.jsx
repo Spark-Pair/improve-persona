@@ -6,22 +6,40 @@ import { RoutineModal } from '../components/RoutineModal';
 import { useFeedback } from '../context/feedbackContext';
 
 const formatRecurrenceSummary = (routine) => {
+  const timePart = routine.scheduledTime
+    ? ` · ${formatTime(routine.scheduledTime)}`
+    : '';
+
   switch (routine.recurrenceType) {
     case 'daily':
-      return 'Daily';
+      return `Daily${timePart}`;
     case 'weekly': {
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const days = Array.isArray(routine.recurrenceDays) ? routine.recurrenceDays : [];
-      if (days.length === 0) return 'Weekly';
-      return days.sort((a, b) => a - b).map(d => dayNames[d]).join(', ');
+      const label = days.length === 0 ? 'Weekly' : days.sort((a, b) => a - b).map(d => dayNames[d]).join(', ');
+      return `${label}${timePart}`;
     }
+    case 'monthly':
+      return `Monthly · Day ${routine.monthlyDay || 1}${timePart}`;
     case 'interval':
-      return `Every ${routine.recurrenceInterval || 1} days`;
-    case 'none':
-      return 'One-time';
+      return `Every ${routine.recurrenceInterval || 1} days${timePart}`;
+    case 'none': {
+      if (!routine.scheduledDate) return `One-time${timePart}`;
+      const d = new Date(routine.scheduledDate + 'T00:00:00');
+      const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `${formatted}${timePart}`;
+    }
     default:
-      return 'Daily';
+      return `Daily${timePart}`;
   }
+};
+
+// Helper
+const formatTime = (timeStr) => {
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`;
 };
 
 const Routine = () => {

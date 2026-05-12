@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CheckCircle2, Circle, ChevronRight, Zap, Target, Camera, Plus } from 'lucide-react';
 import { Card, SectionHeader } from '../components/UI';
 import { db } from '../db';
-import { isTaskDue, getTodayString } from '../utils/engine';
+import { isTaskDue, getTodayString, formatTime12 } from '../utils/engine';
 import { PhotoViewer } from '../components/PhotoViewer';
 import {
   completionHasPhoto,
@@ -19,22 +19,16 @@ const Home = () => {
     setLoading(true);
     const today = getTodayString();
 
-    // 1. Get all routines
     const allRoutines = await db.routines.toArray();
-
-    // 2. Filter routines due today
     const dueToday = allRoutines.filter(r => isTaskDue(r));
 
-    // 3. Get today's completions
     const completions = await db.completions
       .where('date')
       .equals(today)
       .toArray();
     const hydratedCompletions = await hydrateCompletionPhotos(completions);
-
     const completionMap = new Map(hydratedCompletions.map(c => [c.routineId, c]));
 
-    // 4. Combine
     const dailyTasks = dueToday.map(r => {
       const completion = completionMap.get(r.id) || null;
       const taskType = r.taskType || 'checkbox';
@@ -56,7 +50,14 @@ const Home = () => {
         photoBlob,
         completed,
       };
-    }).sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1));
+    }).sort((a, b) => {
+      // Sort: incomplete first, then by scheduledTime ascending, then completed
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      if (a.scheduledTime && b.scheduledTime) return a.scheduledTime.localeCompare(b.scheduledTime);
+      if (a.scheduledTime) return -1;
+      if (b.scheduledTime) return 1;
+      return 0;
+    });
 
     setTasks(dailyTasks);
     setLoading(false);
@@ -119,20 +120,18 @@ const Home = () => {
     loadDailyTasks();
   };
 
-  const openViewer = (blob, title) => {
-    setViewer({ open: true, blob, title });
-  };
+  const completedCount = tasks.filter(t => t.completed).length;
+  const progressPercent = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
-  const closeViewer = () => setViewer({ open: false, blob: null, title: '' });
+  // ─── Sub-components ───────────────────────────────────────────────────────
 
-  const TaskCard = ({ task }) => {
-    if (task.taskType === 'counter') {
-      return <CounterTaskCard task={task} onInc={() => incrementCounter(task)} onDec={() => decrementCounter(task)} />;
-    }
-    if (task.taskType === 'photo') {
-      return <PhotoTaskCard task={task} onSave={(blob) => savePhoto(task, blob)} onView={(blob) => openViewer(blob, task.name)} />;
-    }
-    return <CheckboxTaskCard task={task} onToggle={() => toggleCheckbox(task)} />;
+  const TimeBadge = ({ time }) => {
+    if (!time) return null;
+    return (
+      <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#3B82F6]/10 border border-[#3B82F6]/20 text-[#3B82F6] font-bold uppercase tracking-tighter">
+        🕐 {formatTime12(time)}
+      </span>
+    );
   };
 
   const CheckboxTaskCard = ({ task, onToggle }) => (
@@ -148,21 +147,25 @@ const Home = () => {
         <div className={`transition-all duration-300 ${task.completed ? 'scale-110' : ''}`}>
           {task.completed
             ? <CheckCircle2 size={26} className="text-[#10B981]" />
-            : <Circle size={26} className="text-[#4B5563] group-hover:text-[#3B82F6]" />
+            : <Circle size={26} className="text-[#4B5563]" />
           }
         </div>
         <div>
           <h4 className={`font-semibold transition-all ${task.completed ? 'line-through text-[#9CA3AF]' : 'text-white'}`}>
             {task.name}
           </h4>
-          <div className="flex items-center gap-3 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-black/30 text-[#E5E7EB]/50 font-bold uppercase tracking-tighter">
               {task.recurrenceType}
             </span>
+            <TimeBadge time={task.scheduledTime} />
           </div>
         </div>
       </div>
-      <ChevronRight size={18} className={`transition-transform duration-300 ${task.completed ? 'opacity-0' : 'opacity-20 group-hover:translate-x-1'}`} />
+      <ChevronRight
+        size={18}
+        className={`transition-transform duration-300 ${task.completed ? 'opacity-0' : 'opacity-20'}`}
+      />
     </Card>
   );
 
@@ -187,17 +190,13 @@ const Home = () => {
     };
 
     const onSwipeStart = (e) => {
-      const x = e.clientX ?? 0;
-      const y = e.clientY ?? 0;
-      setSwipeState({ x, y, fired: false });
+      setSwipeState({ x: e.clientX ?? 0, y: e.clientY ?? 0, fired: false });
     };
 
     const onSwipeMove = (e) => {
       if (!swipeState || swipeState.fired) return;
-      const x = e.clientX ?? 0;
-      const y = e.clientY ?? 0;
-      const dx = x - swipeState.x;
-      const dy = y - swipeState.y;
+      const dx = (e.clientX ?? 0) - swipeState.x;
+      const dy = (e.clientY ?? 0) - swipeState.y;
       if (Math.abs(dy) > 30) return;
       if (Math.abs(dx) > 50) {
         setSwipeState({ ...swipeState, fired: true });
@@ -205,9 +204,9 @@ const Home = () => {
       }
     };
 
-    const onSwipeEnd = () => setSwipeState(null);
-
-    const progress = task.counterTarget > 0 ? Math.min(100, Math.round((task.counterValue / task.counterTarget) * 100)) : 0;
+    const progress = task.counterTarget > 0
+      ? Math.min(100, Math.round((task.counterValue / task.counterTarget) * 100))
+      : 0;
 
     return (
       <Card
@@ -215,14 +214,14 @@ const Home = () => {
           ${task.completed
             ? 'bg-[#10B981]/10 border-[#10B981]/30'
             : 'bg-[#374151]/80 border-white/5 hover:border-[#3B82F6]/50 shadow-lg'
-        }`}
+          }`}
       >
         <div
           className="flex items-center gap-4 flex-1 min-w-0"
           onPointerDown={onSwipeStart}
           onPointerMove={onSwipeMove}
-          onPointerUp={onSwipeEnd}
-          onPointerCancel={onSwipeEnd}
+          onPointerUp={() => setSwipeState(null)}
+          onPointerCancel={() => setSwipeState(null)}
         >
           <div className={`transition-all duration-300 ${task.completed ? 'scale-110' : ''}`}>
             {task.completed
@@ -234,7 +233,7 @@ const Home = () => {
             <h4 className={`font-semibold transition-all truncate ${task.completed ? 'text-[#10B981]' : 'text-white'}`}>
               {task.name}
             </h4>
-            <div className="flex items-center gap-3 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <div
                 className="text-[10px] px-3 py-1 rounded-full bg-black/20 border border-white/10 text-[#E5E7EB]/70 font-black uppercase tracking-widest select-none"
                 onPointerDown={startLongPress}
@@ -244,14 +243,17 @@ const Home = () => {
               >
                 {task.counterValue} / {task.counterTarget}
               </div>
+              <TimeBadge time={task.scheduledTime} />
+            </div>
+            <div className="flex items-center gap-2 mt-2">
               <div className="flex-1 h-2 rounded-full bg-black/20 overflow-hidden border border-white/5">
                 <div
-                  className={`h-full ${task.completed ? 'bg-[#10B981]' : 'bg-[#3B82F6]'}`}
+                  className={`h-full transition-all duration-300 ${task.completed ? 'bg-[#10B981]' : 'bg-[#3B82F6]'}`}
                   style={{ width: `${progress}%` }}
                 />
               </div>
             </div>
-            <p className="mt-2 text-[10px] text-[#4B5563] font-medium uppercase tracking-widest">
+            <p className="mt-1.5 text-[10px] text-[#4B5563] font-medium uppercase tracking-widest">
               Hold count or swipe to decrement
             </p>
           </div>
@@ -273,10 +275,7 @@ const Home = () => {
     const [thumbUrl, setThumbUrl] = useState(null);
 
     useEffect(() => {
-      if (!task.photoBlob) {
-        setThumbUrl(null);
-        return;
-      }
+      if (!task.photoBlob) { setThumbUrl(null); return; }
       const url = URL.createObjectURL(task.photoBlob);
       setThumbUrl(url);
       return () => URL.revokeObjectURL(url);
@@ -308,10 +307,11 @@ const Home = () => {
             <h4 className={`font-semibold transition-all truncate ${task.completed ? 'text-[#10B981]' : 'text-white'}`}>
               {task.name}
             </h4>
-            <div className="flex items-center gap-3 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className="text-[10px] px-2 py-0.5 rounded-md bg-black/30 text-[#E5E7EB]/50 font-bold uppercase tracking-tighter">
                 Photo
               </span>
+              <TimeBadge time={task.scheduledTime} />
               {thumbUrl && (
                 <button
                   type="button"
@@ -340,12 +340,20 @@ const Home = () => {
     );
   };
 
-  const completedCount = tasks.filter(t => t.completed).length;
-  const progressPercent = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
+  const TaskCard = ({ task }) => {
+    if (task.taskType === 'counter') {
+      return <CounterTaskCard task={task} onInc={() => incrementCounter(task)} onDec={() => decrementCounter(task)} />;
+    }
+    if (task.taskType === 'photo') {
+      return <PhotoTaskCard task={task} onSave={(blob) => savePhoto(task, blob)} onView={(blob) => setViewer({ open: true, blob, title: task.name })} />;
+    }
+    return <CheckboxTaskCard task={task} onToggle={() => toggleCheckbox(task)} />;
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <>
-      {/* Header Section */}
       <header className="mb-10">
         <div className="flex justify-between items-start mb-6">
           <div>
@@ -359,15 +367,18 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Main Stats Card */}
-        <Card className="relative group overflow-hidden bg-gradient-to-br from-[#374151] to-[#1F2937] border-white/10 transition-all hover:shadow-[#3B82F6]/10">
+        <Card className="relative overflow-hidden bg-gradient-to-br from-[#374151] to-[#1F2937] border-white/10">
           <div className="flex justify-between items-center relative z-10">
             <div>
-              <p className="text-[#E5E7EB]/70 text-xs font-bold uppercase tracking-widest mb-1">Current Streak</p>
-              <h2 className="text-4xl font-black italic">{completedCount === tasks.length && tasks.length > 0 ? '🔥' : ''} Active</h2>
+              <p className="text-[#E5E7EB]/70 text-xs font-bold uppercase tracking-widest mb-1">Today's Progress</p>
+              <h2 className="text-4xl font-black italic">
+                {completedCount === tasks.length && tasks.length > 0 ? '🔥' : ''} Active
+              </h2>
               <div className="mt-4 flex items-center gap-2 bg-black/20 w-fit px-3 py-1 rounded-full border border-white/5">
                 <Target size={14} className="text-[#3B82F6]" />
-                <span className="text-xs font-medium text-[#3B82F6]">{tasks.length - completedCount} Tasks Remaining</span>
+                <span className="text-xs font-medium text-[#3B82F6]">
+                  {tasks.length - completedCount} Tasks Remaining
+                </span>
               </div>
             </div>
 
@@ -387,7 +398,6 @@ const Home = () => {
         </Card>
       </header>
 
-      {/* Routine Section */}
       <section>
         <SectionHeader
           title="Today's Protocol"
@@ -396,7 +406,9 @@ const Home = () => {
 
         <div className="space-y-4">
           {!loading && tasks.length === 0 && (
-            <p className="text-center py-10 text-[#4B5563] text-sm font-medium">No tasks scheduled for today.</p>
+            <p className="text-center py-10 text-[#4B5563] text-sm font-medium">
+              No tasks scheduled for today.
+            </p>
           )}
           {tasks.map((task) => (
             <TaskCard key={task.id} task={task} />
@@ -410,7 +422,7 @@ const Home = () => {
 
       <PhotoViewer
         isOpen={viewer.open}
-        onClose={closeViewer}
+        onClose={() => setViewer({ open: false, blob: null, title: '' })}
         blob={viewer.blob}
         title={viewer.title || 'Photo'}
       />
