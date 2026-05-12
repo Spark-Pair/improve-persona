@@ -2,25 +2,25 @@ import { useEffect } from 'react';
 import { db } from '../db';
 import { isTaskDue, getTodayString, formatTime12 } from './engine';
 
-const MORNING_HOUR = 8; // 8:00 AM summary
-const REMINDER_MINUTES = 15; // 15 min before task time
+const MORNING_HOUR = 8;
+const REMINDER_MINUTES = 15;
+
+const sendNotification = (title, body) => {
+  navigator.serviceWorker.ready.then((sw) => {
+    sw.showNotification(title, {
+      body,
+      vibrate: [200, 100, 200],
+      tag: title,
+    });
+  });
+};
 
 const scheduleNotification = (title, body, fireAt) => {
-  const now = Date.now();
-  const delay = fireAt - now;
-  if (delay <= 0) return; // already passed today
-
+  const delay = fireAt - Date.now();
+  if (delay <= 0) return;
   setTimeout(() => {
     if (Notification.permission !== 'granted') return;
-    navigator.serviceWorker.ready.then((sw) => {
-      sw.showNotification(title, {
-        body,
-        icon: '/icons/icon-192x192.png',
-        badge: '/icons/icon-192x192.png',
-        vibrate: [200, 100, 200],
-        tag: title, // prevents duplicate stacking
-      });
-    });
+    sendNotification(title, body);
   }, delay);
 };
 
@@ -40,7 +40,6 @@ const getTimeFireTime = (timeStr) => {
 export const useNotifications = () => {
   useEffect(() => {
     const init = async () => {
-      // 1. Request permission
       if (!('Notification' in window) || !navigator.serviceWorker) return;
 
       let permission = Notification.permission;
@@ -49,34 +48,37 @@ export const useNotifications = () => {
       }
       if (permission !== 'granted') return;
 
-      const today = getTodayString();
       const allRoutines = await db.routines.toArray();
       const dueToday = allRoutines.filter((r) => isTaskDue(r));
 
       if (dueToday.length === 0) return;
 
-      // 2. Morning summary — 8:00 AM
+      // ── Immediate test — agar ye nahi aaya to SW issue hai ──
+      sendNotification(
+        '✅ Improve Persona',
+        `${dueToday.length} task${dueToday.length > 1 ? 's' : ''} loaded`
+      );
+
+      // ── Morning summary ──
       scheduleNotification(
         '🌅 Daily Protocol',
         `${dueToday.length} task${dueToday.length > 1 ? 's' : ''} scheduled for today`,
         getMorningFireTime()
       );
 
-      // 3. Per-task: exact time + 15-min reminder
+      // ── Per-task: reminder + exact time ──
       dueToday.forEach((routine) => {
         if (!routine.scheduledTime) return;
 
         const exactFire = getTimeFireTime(routine.scheduledTime);
         const reminderFire = exactFire - REMINDER_MINUTES * 60 * 1000;
 
-        // 15-min before reminder
         scheduleNotification(
           `⏰ Coming up: ${routine.name}`,
           `Starts in ${REMINDER_MINUTES} minutes`,
           reminderFire
         );
 
-        // Exact time notification
         scheduleNotification(
           `🎯 Time for: ${routine.name}`,
           `Scheduled at ${formatTime12(routine.scheduledTime)}`,
@@ -86,5 +88,5 @@ export const useNotifications = () => {
     };
 
     init();
-  }, []); // runs once on app mount
+  }, []);
 };
